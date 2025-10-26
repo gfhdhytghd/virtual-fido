@@ -110,7 +110,8 @@ func createClient() *fido_client.DefaultFIDOClient {
 		virtual_fido.SetLogLevel(util.LogLevelDebug)
 	}
 	support := ClientSupport{vaultFilename: vaultFilename, vaultPassphrase: vaultPassphrase}
-	return fido_client.NewDefaultClient(certificateAuthority, caPrivateKey, encryptionKey, false, &support, &support)
+    // Disable PIN by default for maximum compatibility; can be enabled via CLI later
+    return fido_client.NewDefaultClient(certificateAuthority, caPrivateKey, encryptionKey, false, &support, &support)
 }
 
 var rootCmd = &cobra.Command{

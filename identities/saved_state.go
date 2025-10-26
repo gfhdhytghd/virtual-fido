@@ -12,12 +12,13 @@ import (
 )
 
 type SavedCredentialSource struct {
-	Type             string                                  `json:"type"`
-	ID               []byte                                  `json:"id"`
-	PrivateKey       []byte                                  `json:"private_key"`
-	RelyingParty     webauthn.PublicKeyCredentialRPEntity    `json:"relying_party"`
-	User             webauthn.PublicKeyCrendentialUserEntity `json:"user"`
-	SignatureCounter int32                                   `json:"signature_counter"`
+    Type             string                                  `json:"type"`
+    ID               []byte                                  `json:"id"`
+    PrivateKey       []byte                                  `json:"private_key"`
+    RelyingParty     webauthn.PublicKeyCredentialRPEntity    `json:"relying_party"`
+    User             webauthn.PublicKeyCrendentialUserEntity `json:"user"`
+    SignatureCounter int32                                   `json:"signature_counter"`
+    CredRandom       []byte                                  `json:"cred_random,omitempty"`
 }
 
 type FIDODeviceConfig struct {

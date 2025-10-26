@@ -14,7 +14,7 @@ import (
 )
 
 type dummyCTAPClient struct {
-	vault identities.IdentityVault
+    vault identities.IdentityVault
 }
 func (client *dummyCTAPClient) SupportsResidentKey() bool {
 	return true
@@ -31,14 +31,20 @@ func (client *dummyCTAPClient) NewCredentialSource(
 	return client.vault.NewIdentity(relyingParty, user)
 }
 func (client *dummyCTAPClient) GetAssertionSource(
-	relyingPartyID string, 
-	allowList []webauthn.PublicKeyCredentialDescriptor) *identities.CredentialSource {
-	sources := client.vault.GetMatchingCredentialSources(relyingPartyID, allowList)
-	if len(sources) > 0 {
-		return sources[0]
-	} else {
-		return nil
-	}
+    relyingPartyID string, 
+    allowList []webauthn.PublicKeyCredentialDescriptor) *identities.CredentialSource {
+    sources := client.vault.GetMatchingCredentialSources(relyingPartyID, allowList)
+    if len(sources) > 0 {
+        return sources[0]
+    } else {
+        return nil
+    }
+}
+func (client *dummyCTAPClient) GetAssertionSources(
+    relyingPartyID string,
+    allowList []webauthn.PublicKeyCredentialDescriptor) []*identities.CredentialSource {
+    sources := client.vault.GetMatchingCredentialSources(relyingPartyID, allowList)
+    return sources
 }
 func (client *dummyCTAPClient) CreateAttestationCertificiate(privateKey *cose.SupportedCOSEPrivateKey) []byte {
 	return nil
@@ -56,8 +62,9 @@ func (client *dummyCTAPClient) PINKeyAgreement() *crypto.ECDHKey {
 	return nil
 }
 func (client *dummyCTAPClient) PINToken() []byte {
-	return nil
+    return nil
 }
+func (client *dummyCTAPClient) SaveState() {}
 
 func (client *dummyCTAPClient) ApproveAccountCreation(relyingParty string) bool {
 	return true

@@ -11,12 +11,14 @@ import (
 )
 
 type CredentialSource struct {
-	Type             string
-	ID               []byte
-	PrivateKey       *cose.SupportedCOSEPrivateKey
-	RelyingParty     *webauthn.PublicKeyCredentialRPEntity
-	User             *webauthn.PublicKeyCrendentialUserEntity
-	SignatureCounter int32
+    Type             string
+    ID               []byte
+    PrivateKey       *cose.SupportedCOSEPrivateKey
+    RelyingParty     *webauthn.PublicKeyCredentialRPEntity
+    User             *webauthn.PublicKeyCrendentialUserEntity
+    SignatureCounter int32
+    // hmac-secret support: per-credential secret value
+    CredRandom       []byte
 }
 
 func (source *CredentialSource) CTAPDescriptor() webauthn.PublicKeyCredentialDescriptor {
@@ -87,20 +89,21 @@ func (vault *IdentityVault) GetMatchingCredentialSources(relyingPartyID string, 
 }
 
 func (vault *IdentityVault) Export() []SavedCredentialSource {
-	sources := make([]SavedCredentialSource, 0)
-	for _, source := range vault.CredentialSources {
-		key := cose.MarshalCOSEPrivateKey(source.PrivateKey)
-		savedSource := SavedCredentialSource{
-			Type:             source.Type,
-			ID:               source.ID,
-			PrivateKey:       key,
-			RelyingParty:     *source.RelyingParty,
-			User:             *source.User,
-			SignatureCounter: source.SignatureCounter,
-		}
-		sources = append(sources, savedSource)
-	}
-	return sources
+    sources := make([]SavedCredentialSource, 0)
+    for _, source := range vault.CredentialSources {
+        key := cose.MarshalCOSEPrivateKey(source.PrivateKey)
+        savedSource := SavedCredentialSource{
+            Type:             source.Type,
+            ID:               source.ID,
+            PrivateKey:       key,
+            RelyingParty:     *source.RelyingParty,
+            User:             *source.User,
+            SignatureCounter: source.SignatureCounter,
+            CredRandom:       source.CredRandom,
+        }
+        sources = append(sources, savedSource)
+    }
+    return sources
 }
 
 func (vault *IdentityVault) Import(sources []SavedCredentialSource) error {
@@ -113,15 +116,16 @@ func (vault *IdentityVault) Import(sources []SavedCredentialSource) error {
 			}
 			key = &cose.SupportedCOSEPrivateKey{ECDSA: oldFormatKey}
 		}
-		decodedSource := CredentialSource{
-			Type:             source.Type,
-			ID:               source.ID,
-			PrivateKey:       key,
-			RelyingParty:     &source.RelyingParty,
-			User:             &source.User,
-			SignatureCounter: source.SignatureCounter,
-		}
-		vault.AddIdentity(&decodedSource)
-	}
-	return nil
+        decodedSource := CredentialSource{
+            Type:             source.Type,
+            ID:               source.ID,
+            PrivateKey:       key,
+            RelyingParty:     &source.RelyingParty,
+            User:             &source.User,
+            SignatureCounter: source.SignatureCounter,
+            CredRandom:       source.CredRandom,
+        }
+        vault.AddIdentity(&decodedSource)
+    }
+    return nil
 }

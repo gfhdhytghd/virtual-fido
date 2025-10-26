@@ -62,13 +62,14 @@ func NewDefaultClient(
 	enablePIN bool,
 	requestApprover ClientRequestApprover,
 	dataSaver ClientDataSaver) *DefaultFIDOClient {
-	client := &DefaultFIDOClient{
+    client := &DefaultFIDOClient{
 		pinEnabled:            enablePIN,
 		deviceEncryptionKey:   secretEncryptionKey[:],
 		certificateAuthority:  rootAttestationCertificate,
 		certPrivateKey:        rootAttestationCertPrivateKey,
 		authenticationCounter: 1,
-		pinToken:              crypto.RandomBytes(16),
+        // CTAP2 spec: pinUvAuthToken length is 32 bytes for v1/v2
+        pinToken:              crypto.RandomBytes(32),
 		pinKeyAgreement:       crypto.GenerateECDHKey(),
 		pinRetries:            8,
 		pinHash:               nil,
@@ -105,17 +106,28 @@ func (client *DefaultFIDOClient) NewCredentialSource(
 }
 
 func (client *DefaultFIDOClient) GetAssertionSource(relyingPartyID string, allowList []webauthn.PublicKeyCredentialDescriptor) *identities.CredentialSource {
-	sources := client.vault.GetMatchingCredentialSources(relyingPartyID, allowList)
-	if len(sources) == 0 {
-		clientLogger.Printf("ERROR: No Credentials\n\n")
-		return nil
-	}
+    sources := client.vault.GetMatchingCredentialSources(relyingPartyID, allowList)
+    if len(sources) == 0 {
+        clientLogger.Printf("ERROR: No Credentials\n\n")
+        return nil
+    }
 
-	// TODO: Allow user to choose credential source
-	credentialSource := sources[0]
-	credentialSource.SignatureCounter++
-	client.saveData()
-	return credentialSource
+    // TODO: Allow user to choose credential source
+    credentialSource := sources[0]
+    credentialSource.SignatureCounter++
+    client.saveData()
+    return credentialSource
+}
+
+func (client *DefaultFIDOClient) GetAssertionSources(relyingPartyID string, allowList []webauthn.PublicKeyCredentialDescriptor) []*identities.CredentialSource {
+    sources := client.vault.GetMatchingCredentialSources(relyingPartyID, allowList)
+    if len(sources) == 0 {
+        return []*identities.CredentialSource{}
+    }
+    // Increment the first one now (first assertion); GetNextAssertion will increment others when signed there if needed
+    sources[0].SignatureCounter++
+    client.saveData()
+    return sources
 }
 
 func (client DefaultFIDOClient) ApproveAccountCreation(relyingParty string) bool {
@@ -175,11 +187,20 @@ func (client *DefaultFIDOClient) SetPINRetries(retries int32) {
 }
 
 func (client *DefaultFIDOClient) PINKeyAgreement() *crypto.ECDHKey {
-	return client.pinKeyAgreement
+    return client.pinKeyAgreement
+}
+
+// RotatePINKeyAgreement generates a fresh ephemeral ECDH key for the next PIN protocol exchange.
+func (client *DefaultFIDOClient) RotatePINKeyAgreement() {
+    client.pinKeyAgreement = crypto.GenerateECDHKey()
 }
 
 func (client *DefaultFIDOClient) PINToken() []byte {
-	return client.pinToken
+    return client.pinToken
+}
+
+func (client *DefaultFIDOClient) SaveState() {
+    client.saveData()
 }
 
 // -----------------------------
