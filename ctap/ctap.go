@@ -275,8 +275,11 @@ func (server *CTAPServer) handleMakeCredential(data []byte) []byte {
 		return []byte{byte(ctap2ErrUnsupportedAlgorithm)}
 	}
 
-    if server.client.SupportsPIN() {
-        if args.PINUVAuthProtocol == 1 && args.PINUVAuthParam != nil {
+    if server.client.SupportsPIN() && server.client.PINHash() != nil {
+        if args.PINUVAuthParam != nil {
+            if args.PINUVAuthProtocol != 1 {
+                return []byte{byte(ctap2ErrPINAuthInvalid)}
+            }
             token := server.pinTokenByChannel[server.currentChannelID]
             // Fallback for unit tests or non-channel flows: allow verifying with authenticator's token
             if token == nil {
@@ -290,10 +293,12 @@ func (server *CTAPServer) handleMakeCredential(data []byte) []byte {
                 return []byte{byte(ctap2ErrPINAuthInvalid)}
             }
             flags = flags | authDataFlagUserVerified
-        } else if args.PINUVAuthParam == nil && server.client.PINHash() != nil {
-            return []byte{byte(ctap2ErrPINRequired)}
-        } else if args.PINUVAuthParam != nil && args.PINUVAuthProtocol != 1 {
-            return []byte{byte(ctap2ErrPINAuthInvalid)}
+        } else {
+            // Only require PIN for MC when RP explicitly requests UV
+            wantsUV := args.Options != nil && args.Options.UserVerification
+            if wantsUV {
+                return []byte{byte(ctap2ErrPINRequired)}
+            }
         }
     }
 
@@ -405,11 +410,11 @@ type getAssertionArgs struct {
 }
 
 type getAssertionResponse struct {
-    Credential        *webauthn.PublicKeyCredentialDescriptor `cbor:"1,keyasint,omitempty"`
-    AuthenticatorData []byte                                  `cbor:"2,keyasint"`
-    Signature         []byte                                  `cbor:"3,keyasint"`
-    //User                *PublicKeyCrendentialUserEntity `cbor:"4,keyasint,omitempty"`
-    NumberOfCredentials int32                                  `cbor:"5,keyasint,omitempty"`
+    Credential          *webauthn.PublicKeyCredentialDescriptor  `cbor:"1,keyasint,omitempty"`
+    AuthenticatorData   []byte                                   `cbor:"2,keyasint"`
+    Signature           []byte                                   `cbor:"3,keyasint"`
+    User                *webauthn.PublicKeyCrendentialUserEntity `cbor:"4,keyasint,omitempty"`
+    NumberOfCredentials int32                                     `cbor:"5,keyasint,omitempty"`
 }
 
 func (server *CTAPServer) handleGetAssertion(data []byte) []byte {
@@ -426,7 +431,7 @@ func (server *CTAPServer) handleGetAssertion(data []byte) []byte {
     }
     ctapLogger.Printf("GET ASSERTION: %#v\n\n", args)
 
-    if server.client.SupportsPIN() {
+    if server.client.SupportsPIN() && server.client.PINHash() != nil {
         if args.PINUVAuthParam != nil {
             if args.PINUVAuthProtocol != 1 {
                 return []byte{byte(ctap2ErrPINAuthInvalid)}
@@ -443,9 +448,13 @@ func (server *CTAPServer) handleGetAssertion(data []byte) []byte {
                 return []byte{byte(ctap2ErrPINAuthInvalid)}
             }
             flags = flags | authDataFlagUserVerified
-        } else if server.client.PINHash() != nil {
-            // If a PIN is set but no pinUvAuthParam is provided, indicate PIN required
-            return []byte{byte(ctap2ErrPINRequired)}
+        } else {
+            // Only require PIN if RP requests UV or if performing account discovery (no allowList)
+            wantUV := args.Options.UserVerification
+            discoverable := len(args.AllowList) == 0
+            if wantUV || discoverable {
+                return []byte{byte(ctap2ErrPINRequired)}
+            }
         }
     }
 
@@ -490,10 +499,10 @@ func (server *CTAPServer) handleGetAssertion(data []byte) []byte {
 
     credentialDescriptor := credentialSource.CTAPDescriptor()
     response := getAssertionResponse{
-        Credential:        &credentialDescriptor,
-        AuthenticatorData: authData,
-        Signature:         signature,
-        //User:             credentialSource.User,
+        Credential:          &credentialDescriptor,
+        AuthenticatorData:   authData,
+        Signature:           signature,
+        User:                credentialSource.User,
         NumberOfCredentials: 0,
     }
     if len(sources) > 1 {
@@ -594,6 +603,7 @@ func (server *CTAPServer) handleGetNextAssertion() []byte {
         Credential:        &credDesc,
         AuthenticatorData: authData,
         Signature:         signature,
+        User:              cred.User,
     }
     // Cleanup when done
     if len(sess.remaining) == 0 {
