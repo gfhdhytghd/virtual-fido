@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	virtual_fido "github.com/bulwarkid/virtual-fido"
@@ -177,20 +176,23 @@ func disablePIN(cmd *cobra.Command, args []string) {
 	cmd.Println("PIN disabled")
 }
 
-var newPIN int
+var newPIN string
 
 func setPIN(cmd *cobra.Command, args []string) {
-	if newPIN < 0 {
-		cmd.PrintErr("Invalid PIN: PIN must be positive")
+	pin := strings.TrimSpace(newPIN)
+	if len(pin) < 4 {
+		cmd.PrintErr("Invalid PIN: PIN must be at least 4 characters")
 		return
 	}
-	newPINString := strconv.Itoa(newPIN)
-	if len(newPINString) < 4 {
-		cmd.PrintErr("Invalid PIN: PIN must be 4 digits")
+	for _, r := range pin {
+		if (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+			continue
+		}
+		cmd.PrintErr("Invalid PIN: Only digits and letters are allowed")
 		return
 	}
 	client := createClient()
-	client.SetPIN([]byte(newPINString))
+	client.SetPIN([]byte(pin))
 	cmd.Println("PIN set")
 }
 
@@ -232,7 +234,7 @@ Common tasks:
   • node scripts/export_aegis_qr.js --vault vault.json --passphrase passphrase --out-dir ./qr_codes
       Render passkey payloads as QR codes for transfer to other devices.
   • demo pin enable | demo pin set --pin 1234
-      Enable or assign a 4+ digit PIN for the virtual authenticator.`,
+      Enable or assign a 4+ character PIN (letters/digits) for the virtual authenticator.`,
 }
 
 func init() {
@@ -295,7 +297,7 @@ Examples:
 Usage:
   demo pin enable            Enable PIN protection (prompts during authentications).
   demo pin disable           Turn off PIN protection.
-  demo pin set --pin 1234    Assign a new PIN (>=4 digits).`,
+  demo pin set --pin 1234    Assign a new PIN (>=4 characters).`,
 	}
 	enablePINCommand := &cobra.Command{
 		Use:   "enable",
@@ -314,7 +316,7 @@ Usage:
 		Short: "Sets the PIN",
 		Run:   setPIN,
 	}
-	setPINCommand.Flags().IntVar(&newPIN, "pin", -1, "New PIN")
+	setPINCommand.Flags().StringVar(&newPIN, "pin", "", "New PIN (>=4 characters, letters and digits only)")
 	setPINCommand.MarkFlagRequired("pin")
 	pinCommand.AddCommand(setPINCommand)
 	rootCmd.AddCommand(pinCommand)
