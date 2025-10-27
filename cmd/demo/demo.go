@@ -24,6 +24,7 @@ var exportOutput string
 var exportAll bool
 var exportFormat string
 var exportOutputDir string
+var fingerprintUser string
 
 func checkErr(err error, message string) {
 	if err != nil {
@@ -196,6 +197,40 @@ func setPIN(cmd *cobra.Command, args []string) {
 	cmd.Println("PIN set")
 }
 
+func enableFingerprint(cmd *cobra.Command, args []string) {
+	client := createClient()
+	if !client.FingerprintAvailable() {
+		cmd.PrintErrln("Fingerprint verification is unavailable (install fprintd and enroll at least one fingerprint).")
+		cmd.PrintErrln("If your enrolled user differs from the current account, pass --fingerprint-user or set FPRINTD_USER.")
+		return
+	}
+	if !client.VerifyUser(fido_client.ClientActionManageAuthenticator, fido_client.ClientActionRequestParams{}) {
+		cmd.PrintErrln("Fingerprint check failed; fingerprint remains disabled.")
+		return
+	}
+	client.EnableFingerprint()
+	cmd.Println("Fingerprint verification enabled")
+}
+
+func disableFingerprint(cmd *cobra.Command, args []string) {
+	client := createClient()
+	client.DisableFingerprint()
+	cmd.Println("Fingerprint verification disabled")
+}
+
+func fingerprintStatus(cmd *cobra.Command, args []string) {
+	client := createClient()
+	state := "disabled"
+	if client.FingerprintEnabled() {
+		state = "enabled"
+	}
+	availability := "available"
+	if !client.FingerprintAvailable() {
+		availability = "unavailable"
+	}
+	cmd.Printf("Fingerprint verification is %s (system %s)\n", state, availability)
+}
+
 func start(cmd *cobra.Command, args []string) {
 	client := createClient()
 	runServer(client)
@@ -215,8 +250,11 @@ func createClient() *fido_client.DefaultFIDOClient {
 		virtual_fido.SetLogLevel(util.LogLevelDebug)
 	}
 	support := ClientSupport{vaultFilename: vaultFilename, vaultPassphrase: vaultPassphrase}
+	if fingerprintUser != "" {
+		support.fingerprintUser = fingerprintUser
+	}
 	// Disable PIN by default for maximum compatibility; can be enabled via CLI later
-	return fido_client.NewDefaultClient(certificateAuthority, caPrivateKey, encryptionKey, false, &support, &support)
+	return fido_client.NewDefaultClient(certificateAuthority, caPrivateKey, encryptionKey, false, &support, &support, &support)
 }
 
 var rootCmd = &cobra.Command{
@@ -241,6 +279,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&vaultFilename, "vault", "", "vault.json", "Identity vault filename")
 	rootCmd.PersistentFlags().StringVarP(&vaultPassphrase, "passphrase", "", "passphrase", "Identity vault passphrase")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose logging")
+	rootCmd.PersistentFlags().StringVar(&fingerprintUser, "fingerprint-user", "", "Override system user for fingerprint verification (default: current user)")
 	rootCmd.MarkFlagRequired("vault")
 	rootCmd.MarkFlagRequired("passphrase")
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
@@ -320,6 +359,36 @@ Usage:
 	setPINCommand.MarkFlagRequired("pin")
 	pinCommand.AddCommand(setPINCommand)
 	rootCmd.AddCommand(pinCommand)
+
+	fingerprintCommand := &cobra.Command{
+		Use:   "fingerprint",
+		Short: "Manage fingerprint verification",
+		Long: `Manage biometric user verification.
+
+Usage:
+  demo fingerprint enable           Enable fingerprint verification (requires fprintd enrollment).
+  demo fingerprint disable          Disable fingerprint verification.
+  demo fingerprint status           Show current fingerprint state and availability.`,
+	}
+	enableFingerprintCommand := &cobra.Command{
+		Use:   "enable",
+		Short: "Enable fingerprint verification",
+		Run:   enableFingerprint,
+	}
+	fingerprintCommand.AddCommand(enableFingerprintCommand)
+	disableFingerprintCommand := &cobra.Command{
+		Use:   "disable",
+		Short: "Disable fingerprint verification",
+		Run:   disableFingerprint,
+	}
+	fingerprintCommand.AddCommand(disableFingerprintCommand)
+	statusFingerprintCommand := &cobra.Command{
+		Use:   "status",
+		Short: "Show fingerprint verification status",
+		Run:   fingerprintStatus,
+	}
+	fingerprintCommand.AddCommand(statusFingerprintCommand)
+	rootCmd.AddCommand(fingerprintCommand)
 }
 
 func main() {
