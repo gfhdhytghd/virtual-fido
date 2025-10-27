@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"os/user"
 	"strings"
 	"sync"
@@ -76,35 +75,11 @@ func (support *ClientSupport) Passphrase() string {
 }
 
 func (support *ClientSupport) SupportsUserVerification() bool {
-	if _, err := exec.LookPath("fprintd-verify"); err != nil {
-		return false
-	}
-	return support.resolveFingerprintUser() != ""
+	return support.platformSupportsUserVerification()
 }
 
 func (support *ClientSupport) VerifyUser(action fido_client.ClientAction, params fido_client.ClientActionRequestParams) bool {
-	if !support.SupportsUserVerification() {
-		return false
-	}
-	username := support.resolveFingerprintUser()
-	if username == "" {
-		fmt.Println("Fingerprint verification unavailable: no user configured")
-		return false
-	}
-	fmt.Println(support.fingerprintPrompt(action, params))
-	cmd := exec.Command("fprintd-verify", username)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	if err := cmd.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			fmt.Printf("Fingerprint verification failed (exit code %d)\n", exitErr.ExitCode())
-		} else {
-			fmt.Printf("Fingerprint verification error: %v\n", err)
-		}
-		return false
-	}
-	return true
+	return support.platformVerifyUser(action, params)
 }
 
 func (support *ClientSupport) resolveFingerprintUser() string {

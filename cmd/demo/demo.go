@@ -200,8 +200,9 @@ func setPIN(cmd *cobra.Command, args []string) {
 func enableFingerprint(cmd *cobra.Command, args []string) {
 	client := createClient()
 	if !client.FingerprintAvailable() {
-		cmd.PrintErrln("Fingerprint verification is unavailable (install fprintd and enroll at least one fingerprint).")
-		cmd.PrintErrln("If your enrolled user differs from the current account, pass --fingerprint-user or set FPRINTD_USER.")
+		for _, hint := range fingerprintAvailabilityHints() {
+			cmd.PrintErrln(hint)
+		}
 		return
 	}
 	if !client.VerifyUser(fido_client.ClientActionManageAuthenticator, fido_client.ClientActionRequestParams{}) {
@@ -366,7 +367,7 @@ Usage:
 		Long: `Manage biometric user verification.
 
 Usage:
-  demo fingerprint enable           Enable fingerprint verification (requires fprintd enrollment).
+  demo fingerprint enable           Enable fingerprint verification (requires system fingerprint support).
   demo fingerprint disable          Disable fingerprint verification.
   demo fingerprint status           Show current fingerprint state and availability.`,
 	}
